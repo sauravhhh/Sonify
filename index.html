@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Sonify</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+      * { box-sizing: border-box; }
+      :root{
+        --bg:#f3efe7; --panel:#fffdf7; --panel2:#efe9db; --ink:#1d1a15; --muted:#6f675a;
+        --line:#ddd4c2; --accent:#e8490f; --accent-ink:#ffffff; --teal:#0e7c6b;
+        --stage:#16130f; --good:#1d8a4e; --bad:#c22e2e;
+        --shadow:0 10px 30px rgba(60,45,20,.10);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#121110; --panel:#1c1a17; --panel2:#26231f; --ink:#f2ecdf; --muted:#a79c8a;
+          --line:#3a362e; --accent:#ff6a2b; --accent-ink:#1a0e04; --teal:#2fbfa8;
+          --stage:#0b0a09; --good:#3ecf7e; --bad:#ff6b5e;
+          --shadow:0 10px 30px rgba(0,0,0,.45);
+        }
+      }
+      html{ -webkit-text-size-adjust:100%; }
+      body{
+        margin:0; background:var(--bg); color:var(--ink);
+        font-family:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height:1.5;
+      }
+      .wrap{ max-width:960px; margin:0 auto; padding:26px 16px 72px; }
+      h1{ font-size:clamp(28px,5.4vw,46px); line-height:1.08; letter-spacing:-.02em; font-weight:700; margin:6px 0 10px; }
+      h1 .hl{ color:var(--accent); }
+      .lede{ color:var(--muted); font-size:16.5px; max-width:62ch; margin:0 0 22px; }
+      .lede strong{ color:var(--ink); font-weight:600; }
+      .card{ background:var(--panel); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:18px; margin-bottom:18px; }
+      .mono{ font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+      /* ---------- stage ---------- */
+      .stage-head{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+      .stage-name{ font-weight:600; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+      .stage-meta{ color:var(--muted); font-size:12.5px; }
+      .stage-wrap{ position:relative; background:var(--stage); border-radius:12px; overflow:hidden; }
+      .stage-wrap.drag{ outline:3px solid var(--accent); outline-offset:-3px; }
+      #stage{ display:block; width:100%; height:auto; }
+      #playhead{ position:absolute; top:0; bottom:0; width:2px; background:var(--accent); box-shadow:0 0 10px 2px rgba(232,73,15,.55); left:0; opacity:0; pointer-events:none; }
+      #rowband{ position:absolute; left:0; right:0; background:rgba(232,73,15,.28); border-top:1px solid var(--accent); border-bottom:1px solid var(--accent); opacity:0; pointer-events:none; }
+      .stage-actions{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
+      .samples{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
+      .samples .lab{ margin-right:2px; }
+      .thumb{ padding:4px; border:1px solid var(--line); background:var(--panel); border-radius:10px; cursor:pointer; line-height:0; }
+      .thumb[aria-pressed="true"]{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+      .thumb canvas{ border-radius:6px; width:64px; height:48px; }
+      /* ---------- buttons ---------- */
+      .btn{
+        appearance:none; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+        font:inherit; font-size:15px; font-weight:500; border-radius:10px; padding:10px 16px;
+        min-height:44px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; justify-content:center;
+      }
+      .btn:hover{ border-color:var(--muted); }
+      .btn.primary{ background:var(--accent); border-color:transparent; color:var(--accent-ink); font-weight:600; }
+      .btn.teal{ background:var(--teal); border-color:transparent; color:#fff; font-weight:600; }
+      @media (prefers-color-scheme: dark){ .btn.teal{ color:#04231d; } }
+      .btn:disabled{ opacity:.45; cursor:not-allowed; }
+      .btn svg{ flex:none; }
+      .btn.recording{ background:var(--bad); border-color:transparent; color:#fff; }
+      .playbig{
+        width:78px; height:78px; border-radius:50%; border:none; cursor:pointer; flex:none;
+        background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center;
+        box-shadow:0 8px 22px rgba(232,73,15,.35);
+      }
+      .playbig:disabled{ opacity:.5; cursor:wait; }
+      /* ---------- tabs ---------- */
+      .tabs{ display:flex; gap:4px; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px; margin:4px 0 18px; box-shadow:var(--shadow); }
+      .tabs button{
+        flex:1; border:none; background:transparent; color:var(--muted); font:inherit; font-weight:600; font-size:15px;
+        border-radius:999px; padding:11px 6px; min-height:46px; cursor:pointer; white-space:nowrap;
+      }
+      .tabs button[aria-selected="true"]{ background:var(--ink); color:var(--bg); }
+      .panel[hidden]{ display:none; }
+      .panel h2{ font-size:21px; margin:2px 0 6px; letter-spacing:-.01em; }
+      .panel .sub{ color:var(--muted); margin:0 0 16px; max-width:64ch; font-size:15px; }
+      .panel .sub strong{ color:var(--ink); }
+      /* ---------- controls ---------- */
+      .play-top{ display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+      .play-readout{ min-width:170px; }
+      .play-readout .t{ font-size:22px; font-weight:600; }
+      .status{ color:var(--muted); font-size:13.5px; min-height:20px; }
+      .status.err{ color:var(--bad); }
+      .status.ok{ color:var(--good); }
+      #wave{ display:block; width:100%; height:76px; margin:16px 0 4px; background:var(--panel2); border-radius:10px; }
+      .controls{ display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:16px 22px; margin-top:14px; }
+      .ctl label.lab, .lab{ display:block; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+      .ctl .val{ color:var(--ink); font-weight:600; }
+      input[type="range"]{ width:100%; accent-color:var(--accent); height:28px; cursor:pointer; }
+      .seg{ display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+      .seg button{ border:none; background:var(--panel); color:var(--muted); font:inherit; font-size:14px; font-weight:500; padding:9px 13px; min-height:42px; cursor:pointer; }
+      .seg button + button{ border-left:1px solid var(--line); }
+      .seg button[aria-pressed="true"]{ background:var(--ink); color:var(--bg); }
+      .rowflex{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+      .bar{ height:9px; background:var(--panel2); border-radius:99px; overflow:hidden; margin-top:12px; }
+      .bar > div{ height:100%; width:0%; background:var(--accent); border-radius:99px; transition:width .12s linear; }
+      .bar.tealbar > div{ background:var(--teal); }
+      .split{ display:grid; grid-template-columns:1fr; gap:20px; }
+      @media (min-width:760px){ .split{ grid-template-columns:250px 1fr; } }
+      .gridprev{ image-rendering:pixelated; width:100%; max-width:250px; height:auto; border-radius:10px; background:var(--stage); display:block; }
+      .recvwrap{ display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; }
+      #recvCanvas{ image-rendering:pixelated; width:min(300px,78vw); height:auto; border-radius:10px; background:var(--stage); display:block; }
+      .kv{ display:grid; grid-template-columns:auto 1fr; gap:4px 16px; font-size:14px; }
+      .kv dt{ color:var(--muted); } .kv dd{ margin:0; font-weight:500; }
+      .hidden-input{ display:none; }
+      #toast{
+        position:fixed; left:50%; bottom:22px; transform:translate(-50%,80px); background:var(--ink); color:var(--bg);
+        padding:11px 18px; border-radius:999px; font-size:14.5px; font-weight:500; box-shadow:var(--shadow);
+        transition:transform .25s ease; z-index:50; max-width:92vw; text-align:center;
+      }
+      #toast.show{ transform:translate(-50%,0); }
+      button:focus-visible, input:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+      @media (prefers-reduced-motion: reduce){ .bar > div{ transition:none; } #toast{ transition:none; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Hear a picture. <span class="hl">Send it as sound.</span></h1>
+      <p class="lede">Load any image and <strong>play it as sound</strong> — the picture is scanned like a spectrogram: high rows ring out as high notes, low rows rumble low, and the brighter an area, the louder it sings. Or go further: <strong>transmit the picture itself as a stream of tones</strong>, and rebuild it on the other side from sound alone — through the air, or from an audio file.</p>
+
+      <!-- ================= IMAGE STAGE ================= -->
+      <section class="card" aria-label="Image">
+        <div class="stage-head">
+          <span class="stage-name" id="imgName">Sample — Sunset ridge</span>
+          <span class="stage-meta mono" id="imgMeta"></span>
+        </div>
+        <div class="stage-wrap" id="dropZone">
+          <canvas id="stage" width="880" height="500"></canvas>
+          <div id="rowband"></div>
+          <div id="playhead"></div>
+        </div>
+        <div class="stage-actions">
+          <button class="btn primary" id="uploadBtn" type="button">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+            Upload an image
+          </button>
+          <button class="btn" id="pasteBtn" type="button">Paste from clipboard</button>
+          <input class="hidden-input" type="file" id="fileInput" accept="image/*" />
+        </div>
+        <div class="samples" id="samples">
+          <span class="lab">Try a sample</span>
+        </div>
+      </section>
+
+      <!-- ================= TABS ================= -->
+      <div class="tabs" role="tablist" aria-label="Sonify modes">
+        <button role="tab" id="tab-play" aria-selected="true" aria-controls="panel-play" type="button">▶&nbsp; Play it</button>
+        <button role="tab" id="tab-send" aria-selected="false" aria-controls="panel-send" type="button">Send as sound</button>
+        <button role="tab" id="tab-receive" aria-selected="false" aria-controls="panel-receive" type="button">Receive sound</button>
+      </div>
+
+      <!-- ================= PLAY ================= -->
+      <section class="card panel" id="panel-play" role="tabpanel" aria-labelledby="tab-play">
+        <h2>Play the image as sound</h2>
+        <p class="sub">The image is read left to right, one column at a time. In each column, every row becomes a note — <strong>top rows are high pitches, bottom rows are low</strong> — and the brighter the pixel, the louder its note. A face, a letter, a skyline: each has its own chord sweep.</p>
+        <div class="play-top">
+          <button class="playbig" id="playBtn" type="button" aria-label="Play the image as sound">
+            <svg id="playIcon" width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+          </button>
+          <div class="play-readout">
+            <div class="t mono" id="playTime">0:00 / 0:04</div>
+            <div class="status" id="playStatus">Sound is rendered fresh from the picture each time you press play.</div>
+          </div>
+          <div class="rowflex" style="margin-left:auto">
+            <button class="btn" id="dlPlayBtn" type="button" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>
+              Download this sound (.wav)
+            </button>
+          </div>
+        </div>
+        <canvas id="wave" width="900" height="76" aria-hidden="true"></canvas>
+        <div class="controls">
+          <div class="ctl">
+            <label class="lab" for="durRange">Play length · <span class="val mono" id="durVal">4.0 s</span></label>
+            <input type="range" id="durRange" min="1" max="12" step="0.5" value="4" />
+          </div>
+          <div class="ctl">
+            <label class="lab" for="detailRange">Detail (rows scanned) · <span class="val mono" id="detailVal">44</span></label>
+            <input type="range" id="detailRange" min="16" max="80" step="2" value="44" />
+          </div>
+          <div class="ctl">
+            <label class="lab" for="lowRange">Lowest pitch · <span class="val mono" id="lowVal">160 Hz</span></label>
+            <input type="range" id="lowRange" min="60" max="600" step="10" value="160" />
+          </div>
+          <div class="ctl">
+            <label class="lab" for="highRange">Highest pitch · <span class="val mono" id="highVal">2400 Hz</span></label>
+            <input type="range" id="highRange" min="700" max="5000" step="50" value="2400" />
+          </div>
+          <div class="ctl">
+            <label class="lab" for="volRange">Volume · <span class="val mono" id="volVal">80%</span></label>
+            <input type="range" id="volRange" min="0" max="100" step="1" value="80" />
+          </div>
+          <div class="ctl">
+            <span class="lab">Tone</span>
+            <div class="seg" id="waveSeg" role="group" aria-label="Tone shape">
+              <button type="button" data-wave="sine" aria-pressed="true">Sine</button>
+              <button type="button" data-wave="triangle" aria-pressed="false">Triangle</button>
+              <button type="button" data-wave="square" aria-pressed="false">Square</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <span class="lab">Brightness</span>
+            <div class="seg" id="invSeg" role="group" aria-label="Brightness mapping">
+              <button type="button" data-inv="0" aria-pressed="true">Normal</button>
+              <button type="button" data-inv="1" aria-pressed="false">Inverted</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SEND ================= -->
+      <section class="card panel" id="panel-send" role="tabpanel" aria-labelledby="tab-send" hidden>
+        <h2>Send the image as sound</h2>
+        <p class="sub">A different method: the picture is shrunk to a small grid and <strong>every pixel is turned into one short tone</strong> — bright pixels beep high, dark pixels beep low, row by row, with a marker beep starting each row. Play it out loud and a phone running <strong>Receive sound</strong> can rebuild the picture from the tones alone. No file ever changes hands — just sound.</p>
+        <div class="split">
+          <div>
+            <span class="lab">The grid that gets sent</span>
+            <canvas id="sendPreview" class="gridprev" width="32" height="32"></canvas>
+            <div class="status mono" id="sendMeta" style="margin-top:8px"></div>
+          </div>
+          <div>
+            <div class="ctl" style="margin-bottom:16px">
+              <span class="lab">Transmission size</span>
+              <div class="seg" id="sizeSeg" role="group" aria-label="Transmission size">
+                <button type="button" data-size="24" aria-pressed="false">24 × 24 · fast</button>
+                <button type="button" data-size="32" aria-pressed="true">32 × 32</button>
+                <button type="button" data-size="48" aria-pressed="false">48 × 48 · detailed</button>
+              </div>
+            </div>
+            <div class="rowflex">
+              <button class="btn primary" id="txPlayBtn" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+                Play transmission
+              </button>
+              <button class="btn" id="txDlBtn" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>
+                Download transmission (.wav)
+              </button>
+            </div>
+            <div class="bar" aria-hidden="true"><div id="txBar"></div></div>
+            <div class="status" id="txStatus" style="margin-top:10px">The transmission is built from the picture above, exactly as it will be heard.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= RECEIVE ================= -->
+      <section class="card panel" id="panel-receive" role="tabpanel" aria-labelledby="tab-receive" hidden>
+        <h2>Receive an image from sound</h2>
+        <p class="sub">Point this device at a speaker playing a Sonify transmission, or feed it the transmission as an audio file. It listens for the marker beeps, measures every tone's pitch, and <strong>rebuilds the picture pixel by pixel</strong>. For the clearest copy, keep the volume up and the room quiet.</p>
+        <div class="rowflex" style="margin-bottom:6px">
+          <button class="btn teal" id="micBtn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            <span id="micBtnText">Listen with microphone</span>
+          </button>
+          <button class="btn" id="audioUploadBtn" type="button">Upload a sound file</button>
+          <button class="btn" id="selfDecodeBtn" type="button" disabled>Decode my last transmission here</button>
+          <input class="hidden-input" type="file" id="audioInput" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm" />
+        </div>
+        <div class="status" id="rxStatus">Nothing received yet. A 32 × 32 transmission takes about 20 seconds to play in full.</div>
+        <div class="bar tealbar" aria-hidden="true"><div id="rxBar"></div></div>
+        <div class="recvwrap" style="margin-top:18px">
+          <div>
+            <span class="lab">Rebuilt picture</span>
+            <canvas id="recvCanvas" width="32" height="32"></canvas>
+          </div>
+          <div style="flex:1; min-width:220px">
+            <dl class="kv">
+              <dt>Grid</dt><dd class="mono" id="rxGrid">—</dd>
+              <dt>Rows decoded</dt><dd class="mono" id="rxRows">—</dd>
+              <dt>Match with picture above</dt><dd class="mono" id="rxMatch">—</dd>
+            </dl>
+            <div class="rowflex" style="margin-top:14px">
+              <button class="btn" id="rxDlBtn" type="button" disabled>Download rebuilt picture (.png)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p class="status" style="text-align:center">Made for listening to pictures — headphones recommended, the transmission is a cheerful modem song.</p>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  <script>
+  "use strict";
+  /* ============================================================
+     Sonify — image ⇄ sound
+     Play mode: column-scan sonification (top = high pitch).
+     Send mode: each pixel of a small grid becomes one tone
+     (bright = high pitch), rows led by a 2800 Hz marker beep.
+     Receive mode: Goertzel tone detection rebuilds the grid.
+     ============================================================ */
+  const $ = (s) => document.querySelector(s);
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const SR = 44100;
+
+  /* ---------------- state ---------------- */
+  const state = {
+    source: null,          // HTMLCanvasElement holding the current image
+    sourceName: "",
+    playDirty: true,
+    playBuffer: null,
+    waveShape: "sine",
+    invert: false,
+    sendSize: 32,
+    tx: null,              // {buffer, w, h, rowTimes:[{start,end}], duration}
+    decoded: null,         // {w, h, data:Uint8Array}
+    playing: null,         // {kind:'play'|'tx', source, raf, startedAt, ctx}
+  };
+
+  let actx = null;
+  function audioCtx() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    return actx;
+  }
+
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._h);
+    toast._h = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+  function setStatus(el, msg, cls) {
+    el.textContent = msg;
+    el.className = "status" + (cls ? " " + cls : "");
+  }
+
+  /* ---------------- sample images (drawn, no downloads) ---------------- */
+  function makeCanvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+
+  const SAMPLES = [
+    { name: "Sunset ridge", draw(g, w, h) {
+        const bands = ["#f7b733", "#fc7a4a", "#e8490f", "#a52a4a", "#5b2a5e", "#2c2140"];
+        bands.forEach((col, i) => { g.fillStyle = col; g.fillRect(0, Math.floor(h * i / bands.length), w, Math.ceil(h / bands.length) + 1); });
+        g.fillStyle = "#fff3c4"; g.beginPath(); g.arc(w * 0.68, h * 0.40, h * 0.16, 0, 7); g.fill();
+        g.fillStyle = "#241a2e"; g.beginPath(); g.moveTo(0, h); g.lineTo(0, h * 0.78); g.lineTo(w * 0.34, h * 0.52); g.lineTo(w * 0.58, h * 0.80); g.lineTo(w * 0.78, h * 0.62); g.lineTo(w, h * 0.84); g.lineTo(w, h); g.closePath(); g.fill();
+      } },
+    { name: "Smiley", draw(g, w, h) {
+        g.fillStyle = "#0e7c6b"; g.fillRect(0, 0, w, h);
+        g.fillStyle = "#ffd23e"; g.beginPath(); g.arc(w / 2, h / 2, h * 0.36, 0, 7); g.fill();
+        g.fillStyle = "#26221c"; g.beginPath(); g.arc(w * 0.40, h * 0.42, h * 0.045, 0, 7); g.fill();
+        g.beginPath(); g.arc(w * 0.60, h * 0.42, h * 0.045, 0, 7); g.fill();
+        g.strokeStyle = "#26221c"; g.lineWidth = h * 0.035; g.lineCap = "round";
+        g.beginPath(); g.arc(w / 2, h * 0.52, h * 0.20, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+      } },
+    { name: "Letter A", draw(g, w, h) {
+        g.fillStyle = "#f3efe7"; g.fillRect(0, 0, w, h);
+        g.fillStyle = "#1d1a15"; g.font = "700 " + Math.floor(h * 0.78) + "px Georgia, serif";
+        g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("A", w / 2, h * 0.54);
+      } },
+    { name: "Heart", draw(g, w, h) {
+        g.fillStyle = "#f6d9d4"; g.fillRect(0, 0, w, h);
+        g.fillStyle = "#d92323"; g.beginPath();
+        const cx = w / 2, cy = h * 0.40, s = h * 0.30;
+        g.moveTo(cx, cy + s * 1.15);
+        g.bezierCurveTo(cx - s * 1.5, cy + s * 0.1, cx - s * 0.95, cy - s * 1.05, cx, cy - s * 0.35);
+        g.bezierCurveTo(cx + s * 0.95, cy - s * 1.05, cx + s * 1.5, cy + s * 0.1, cx, cy + s * 1.15);
+        g.fill();
+      } },
+    { name: "Rings", draw(g, w, h) {
+        g.fillStyle = "#101418"; g.fillRect(0, 0, w, h);
+        const cols = ["#f8f4e8", "#c9ced6", "#8f97a3", "#565e68", "#2e343c"];
+        for (let i = cols.length - 1; i >= 0; i--) {
+          g.fillStyle = cols[i]; g.beginPath();
+          g.arc(w * 0.5, h * 0.5, h * (0.10 + i * 0.085), 0, 7); g.fill();
+        }
+      } },
+  ];
+
+  function sampleCanvas(idx, w, h) {
+    const c = makeCanvas(w || 880, h || 500);
+    SAMPLES[idx].draw(c.getContext("2d"), c.width, c.height);
+    return c;
+  }
+
+  /* ---------------- image loading ---------------- */
+  const stage = $("#stage"), stageCtx = stage.getContext("2d");
+
+  function setSource(canvas, name) {
+    state.source = canvas;
+    state.sourceName = name;
+    state.playDirty = true;
+    state.tx = null;
+    $("#dlPlayBtn").disabled = true;
+    $("#selfDecodeBtn").disabled = true;
+    $("#imgName").textContent = name;
+    $("#imgMeta").textContent = canvas.width + " × " + canvas.height + " px";
+    // fit into the stage keeping aspect (stage box is 880×500 max)
+    const scale = Math.min(880 / canvas.width, 500 / canvas.height, 1);
+    stage.width = Math.max(2, Math.round(canvas.width * scale));
+    stage.height = Math.max(2, Math.round(canvas.height * scale));
+    stageCtx.drawImage(canvas, 0, 0, stage.width, stage.height);
+    drawSendPreview();
+    document.querySelectorAll(".thumb").forEach((b) => b.setAttribute("aria-pressed", "false"));
+  }
+
+  function loadImageFile(file) {
+    if (!file || !/^image\//.test(file.type)) { toast("That file is not an image."); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const c = makeCanvas(img.naturalWidth, img.naturalHeight);
+      c.getContext("2d").drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      setSource(c, file.name || "Uploaded image");
+      toast("Image loaded — press play to hear it.");
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast("Could not read that image."); };
+    img.src = url;
+  }
+
+  $("#uploadBtn").addEventListener("click", () => $("#fileInput").click());
+  $("#fileInput").addEventListener("change", (e) => { loadImageFile(e.target.files[0]); e.target.value = ""; });
+
+  const dropZone = $("#dropZone");
+  ["dragenter", "dragover"].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove("drag"); }));
+  dropZone.addEventListener("drop", (e) => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadImageFile(f); });
+  document.addEventListener("paste", (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) if (/^image\//.test(it.type)) { loadImageFile(it.getAsFile()); return; }
+  });
+  $("#pasteBtn").addEventListener("click", async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find((t) => t.startsWith("image/"));
+        if (type) { loadImageFile(await it.getType(type)); return; }
+      }
+      toast("No image on the clipboard — copy one first, or just press Ctrl+V.");
+    } catch (err) { toast("Clipboard reading is blocked here — press Ctrl+V anywhere on the page instead."); }
+  });
+
+  // sample thumbnails
+  const samplesEl = $("#samples");
+  SAMPLES.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "thumb"; b.title = s.name; b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    const thumb = sampleCanvas(i, 128, 96);
+    b.appendChild(thumb);
+    b.addEventListener("click", () => {
+      setSource(sampleCanvas(i), "Sample — " + s.name);
+      b.setAttribute("aria-pressed", "true");
+      stopPlayback();
+    });
+    samplesEl.appendChild(b);
+  });
+
+  /* ---------------- grayscale grid ---------------- */
+  function computeGrid(w, h) {
+    const c = makeCanvas(w, h), g = c.getContext("2d");
+    g.fillStyle = "#000"; g.fillRect(0, 0, w, h);
+    if (state.source) {
+      // cover-fit the source into the grid so the whole grid is used
+      const s = state.source, sa = s.width / s.height, ta = w / h;
+      let sw = s.width, sh = s.height, sx = 0, sy = 0;
+      if (sa > ta) { sw = s.height * ta; sx = (s.width - sw) / 2; } else { sh = s.width / ta; sy = (s.height - sh) / 2; }
+      g.imageSmoothingEnabled = true;
+      g.drawImage(s, sx, sy, sw, sh, 0, 0, w, h);
+    }
+    const px = g.getImageData(0, 0, w, h).data;
+    const out = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) out[i] = (0.2126 * px[i * 4] + 0.7152 * px[i * 4 + 1] + 0.0722 * px[i * 4 + 2]) / 255;
+    return out;
+  }
+
+  /* ---------------- PLAY: sonification synthesis ---------------- */
+  const P = {
+    dur: () => parseFloat($("#durRange").value),
+    rows: () => parseInt($("#detailRange").value, 10),
+    low: () => parseFloat($("#lowRange").value),
+    high: () => parseFloat($("#highRange").value),
+    vol: () => parseInt($("#volRange").value, 10) / 100,
+  };
+
+  function renderPlayBuffer() {
+    const rows = P.rows();
+    const aspect = state.source ? state.source.width / state.source.height : 1.6;
+    const cols = clamp(Math.round(rows * aspect * 1.35), 24, 220);
+    let grid = computeGrid(cols, rows);
+    if (state.invert) { const inv = new Float32Array(grid.length); for (let i = 0; i < grid.length; i++) inv[i] = 1 - grid[i]; grid = inv; }
+    const dur = P.dur(), n = Math.floor(dur * SR);
+    const ctx = audioCtx();
+    const buf = ctx.createBuffer(1, n, SR);
+    const out = buf.getChannelData(0);
+    const fLow = Math.min(P.low(), P.high() - 50), fHigh = Math.max(P.high(), fLow + 50);
+    const freq = new Float64Array(rows), phase = new Float64Array(rows);
+    for (let r = 0; r < rows; r++) {
+      const t = rows === 1 ? 0 : r / (rows - 1);           // 0 = top row
+      freq[r] = Math.exp(Math.log(fHigh) + (Math.log(fLow) - Math.log(fHigh)) * t);
+    }
+    const amp = new Float32Array(rows * cols);
+    for (let i = 0; i < grid.length; i++) amp[i] = Math.pow(grid[i], 1.35);
+    const shape = state.waveShape;
+    const osc = shape === "triangle" ? (s) => (2 / Math.PI) * Math.asin(s)
+              : shape === "square" ? (s) => Math.tanh(2.6 * s)
+              : (s) => s;
+    const norm = 0.85 / Math.sqrt(rows) * 2.4;
+    for (let i = 0; i < n; i++) {
+      const cf = (i / n) * cols;
+      const c0 = Math.min(cols - 1, Math.floor(cf)), c1 = Math.min(cols - 1, c0 + 1), fr = cf - Math.floor(cf);
+      let sum = 0;
+      for (let r = 0; r < rows; r++) {
+        const a = amp[r * cols + c0] * (1 - fr) + amp[r * cols + c1] * fr;
+        if (a > 0.004) { phase[r] += (2 * Math.PI * freq[r]) / SR; sum += a * osc(Math.sin(phase[r])); }
+        else phase[r] += (2 * Math.PI * freq[r]) / SR;
+      }
+      out[i] = Math.tanh(sum * norm) * 0.92;
+    }
+    return buf;
+  }
+
+  function drawWave(buf) {
+    const cv = $("#wave"), g = cv.getContext("2d");
+    const W = cv.width, H = cv.height;
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    g.clearRect(0, 0, W, H);
+    if (!buf) { g.fillStyle = dark ? "#a79c8a" : "#6f675a"; g.font = "13px 'IBM Plex Mono', monospace"; g.textAlign = "center"; g.fillText("the waveform of your picture's sound will appear here", W / 2, H / 2 + 4); return; }
+    const data = buf.getChannelData(0), step = Math.floor(data.length / W);
+    g.fillStyle = dark ? "#ff6a2b" : "#e8490f";
+    for (let x = 0; x < W; x++) {
+      let mn = 1, mx = -1;
+      const off = x * step;
+      for (let j = 0; j < step; j += 4) { const v = data[off + j]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      const y1 = (1 - mx) * H / 2, y2 = (1 - mn) * H / 2;
+      g.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+    }
+  }
+
+  /* ---------------- WAV encode ---------------- */
+  function bufferToWav(buf) {
+    const data = buf.getChannelData(0), n = data.length;
+    const ab = new ArrayBuffer(44 + n * 2), v = new DataView(ab);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); ws(8, "WAVE"); ws(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, buf.sampleRate, true); v.setUint32(28, buf.sampleRate * 2, true);
+    v.setUint16(32, 2, true); v.setUint16(34, 16, true); ws(36, "data"); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, clamp(data[i], -1, 1) * 0x7fff, true);
+    return new Blob([ab], { type: "audio/wav" });
+  }
+  function download(blob, name) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+</script>
+<script>
+  /* ---------------- playback engine ---------------- */
+  const playhead = $("#playhead"), rowband = $("#rowband");
+
+  function stopPlayback() {
+    if (!state.playing) return;
+    const p = state.playing;
+    state.playing = null;
+    cancelAnimationFrame(p.raf);
+    try { p.source.onended = null; p.source.stop(); } catch (e) {}
+    playhead.style.opacity = "0"; rowband.style.opacity = "0";
+    $("#txBar").style.width = "0%";
+    if (p.kind === "play") { $("#playIcon").innerHTML = '<path d="M7 4.5v15l13-7.5z"/>'; setStatus($("#playStatus"), "Stopped."); $("#playBtn").disabled = false; }
+    if (p.kind === "tx") { $("#txPlayBtn").disabled = false; setStatus($("#txStatus"), "Transmission stopped."); }
+  }
+
+  function startPlayback(kind, buf, onTick, onDone) {
+    stopPlayback();
+    const ctx = audioCtx();
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const gain = ctx.createGain(); gain.gain.value = kind === "play" ? P.vol() : 0.95;
+    src.connect(gain); gain.connect(ctx.destination);
+    const startedAt = ctx.currentTime + 0.03;
+    src.start(startedAt);
+    const rec = { kind, source: src, raf: 0 };
+    state.playing = rec;
+    const tick = () => {
+      if (state.playing !== rec) return;
+      const t = ctx.currentTime - startedAt;
+      const frac = clamp(t / buf.duration, 0, 1);
+      if (kind === "play") {
+        playhead.style.opacity = "1"; playhead.style.left = (frac * 100) + "%";
+        $("#playTime").textContent = fmtTime(t) + " / " + fmtTime(buf.duration);
+      }
+      if (onTick) onTick(t, frac);
+      if (t <= buf.duration + 0.05) rec.raf = requestAnimationFrame(tick);
+    };
+    rec.raf = requestAnimationFrame(tick);
+    src.onended = () => {
+      if (state.playing !== rec) return;
+      state.playing = null;
+      playhead.style.opacity = "0"; rowband.style.opacity = "0";
+      if (onDone) onDone();
+    };
+    return rec;
+  }
+  function fmtTime(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+  /* ---------------- play wiring ---------------- */
+  const playBtn = $("#playBtn");
+  function markPlayDirty() { state.playDirty = true; }
+  ["durRange", "detailRange", "lowRange", "highRange"].forEach((id) => $("#" + id).addEventListener("input", () => {
+    $("#durVal").textContent = P.dur().toFixed(1) + " s";
+    $("#detailVal").textContent = P.rows();
+    $("#lowVal").textContent = P.low() + " Hz";
+    $("#highVal").textContent = P.high() + " Hz";
+    $("#playTime").textContent = "0:00 / " + fmtTime(P.dur());
+    markPlayDirty();
+  }));
+  $("#volRange").addEventListener("input", () => { $("#volVal").textContent = P.vol() * 100 + "%"; });
+  $("#waveSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.waveShape = b.dataset.wave; markPlayDirty();
+    $("#waveSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  });
+  $("#invSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.invert = b.dataset.inv === "1"; markPlayDirty();
+    $("#invSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  });
+
+  playBtn.addEventListener("click", () => {
+    if (state.playing && state.playing.kind === "play") { stopPlayback(); return; }
+    if (!state.source) { toast("Load an image first."); return; }
+    const status = $("#playStatus");
+    const begin = () => {
+      $("#playIcon").innerHTML = '<rect x="6" y="5" width="4.5" height="14" rx="1"/><rect x="13.5" y="5" width="4.5" height="14" rx="1"/>';
+      setStatus(status, "Playing — the bright parts of the picture are the loud, high notes.");
+      startPlayback("play", state.playBuffer, null, () => {
+        $("#playIcon").innerHTML = '<path d="M7 4.5v15l13-7.5z"/>';
+        $("#playTime").textContent = "0:00 / " + fmtTime(state.playBuffer.duration);
+        setStatus(status, "Finished. Change any setting and play again to hear the picture differently.", "ok");
+      });
+    };
+    if (state.playDirty || !state.playBuffer) {
+      playBtn.disabled = true;
+      setStatus(status, "Rendering the picture into sound…");
+      setTimeout(() => {
+        try {
+          state.playBuffer = renderPlayBuffer();
+          state.playDirty = false;
+          drawWave(state.playBuffer);
+          $("#dlPlayBtn").disabled = false;
+          $("#playTime").textContent = "0:00 / " + fmtTime(state.playBuffer.duration);
+        } catch (err) { setStatus(status, "Rendering failed: " + err.message, "err"); playBtn.disabled = false; return; }
+        playBtn.disabled = false;
+        begin();
+      }, 30);
+    } else begin();
+  });
+  $("#dlPlayBtn").addEventListener("click", () => {
+    if (state.playBuffer) { download(bufferToWav(state.playBuffer), "sonify-sound.wav"); toast("Sound downloaded as a WAV file."); }
+  });
+
+  /* ============================================================
+     SEND — image as a tone transmission
+     Format (mono 44.1 kHz):
+       silence 120ms · marker 90ms · gap 50 · width tone 140ms ·
+       gap 40 · height tone 140ms · gap 50 ·
+       per row: marker 34ms · guard 4ms · W pixel tones × 18ms ·
+       end marker 120ms · silence 120ms
+     Pixel tone freq = 500 + level/31 × 1500 Hz (level 0..31)
+     Marker = 2800 Hz · size tone = 2250 + idx×70 Hz
+     ============================================================ */
+  const TX = { SYNC: 2800, LEVELS: 32, PIXEL_MS: 18, ROWSYNC_MS: 34, GUARD_MS: 4, SIZES: [16, 24, 32, 48, 64] };
+  const dataFreq = (level) => 500 + (level / (TX.LEVELS - 1)) * 1500;
+  const cfgFreq = (idx) => 2250 + idx * 70;
+
+  function txDuration(w, h) {
+    const ms = 120 + 90 + 50 + 140 + 40 + 140 + 50 + h * (TX.ROWSYNC_MS + TX.GUARD_MS + w * TX.PIXEL_MS) + 120 + 120;
+    return ms / 1000;
+  }
+
+  function buildTransmission() {
+    const w = state.sendSize, h = state.sendSize;
+    const grid = computeGrid(w, h);
+    const totalMs = txDuration(w, h) * 1000;
+    const n = Math.ceil(totalMs / 1000 * SR);
+    const ctx = audioCtx();
+    const buf = ctx.createBuffer(1, n, SR);
+    const out = buf.getChannelData(0);
+    let pos = 0; // samples
+    const tone = (freq, ms, amp) => {
+      const len = Math.round(ms / 1000 * SR), fade = Math.round(0.0016 * SR);
+      for (let i = 0; i < len; i++) {
+        const env = Math.min(1, i / fade, (len - i) / fade);
+        out[pos + i] = Math.sin(2 * Math.PI * freq * (i / SR)) * (amp || 0.82) * env;
+      }
+      pos += len;
+    };
+    const silence = (ms) => { pos += Math.round(ms / 1000 * SR); };
+    const rowTimes = [];
+    silence(120);
+    tone(TX.SYNC, 90); silence(50);
+    tone(cfgFreq(TX.SIZES.indexOf(w)), 140); silence(40);
+    tone(cfgFreq(TX.SIZES.indexOf(h)), 140); silence(50);
+    for (let r = 0; r < h; r++) {
+      const start = pos / SR;
+      tone(TX.SYNC, TX.ROWSYNC_MS); silence(TX.GUARD_MS);
+      for (let c = 0; c < w; c++) tone(dataFreq(Math.round(grid[r * w + c] * (TX.LEVELS - 1))), TX.PIXEL_MS);
+      rowTimes.push({ start, end: pos / SR });
+    }
+    tone(TX.SYNC, 120); silence(120);
+    return { buffer: buf, w, h, rowTimes, duration: buf.duration };
+  }
+
+  function drawSendPreview() {
+    const cv = $("#sendPreview"), w = state.sendSize, h = state.sendSize;
+    cv.width = w; cv.height = h;
+    const g = cv.getContext("2d");
+    const grid = computeGrid(w, h);
+    const img = g.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) { const v = Math.round(grid[i] * 255); img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    $("#sendMeta").textContent = w + " × " + h + " grid · " + (w * h) + " tones · ≈ " + txDuration(w, h).toFixed(0) + " s on air";
+    state.tx = null;
+    $("#selfDecodeBtn").disabled = true;
+  }
+
+  $("#sizeSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    state.sendSize = parseInt(b.dataset.size, 10);
+    $("#sizeSeg").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    drawSendPreview();
+    setStatus($("#txStatus"), "Size changed — the transmission will be rebuilt when you play or download it.");
+  });
+
+  function ensureTx() { if (!state.tx) state.tx = buildTransmission(); return state.tx; }
+
+  $("#txPlayBtn").addEventListener("click", () => {
+    if (state.playing && state.playing.kind === "tx") { stopPlayback(); return; }
+    if (!state.source) { toast("Load an image first."); return; }
+    const st = $("#txStatus");
+    setStatus(st, "Building the transmission…");
+    setTimeout(() => {
+      let tx;
+      try { tx = ensureTx(); } catch (err) { setStatus(st, "Could not build it: " + err.message, "err"); return; }
+      $("#selfDecodeBtn").disabled = false;
+      $("#txPlayBtn").disabled = true;
+      setStatus(st, "Transmitting — hold a receiving device near the speaker now.");
+      startPlayback("tx", tx.buffer, (t) => {
+        $("#txBar").style.width = (clamp(t / tx.duration, 0, 1) * 100) + "%";
+        let row = -1;
+        for (let r = 0; r < tx.rowTimes.length; r++) if (t >= tx.rowTimes[r].start && t <= tx.rowTimes[r].end) { row = r; break; }
+        if (row >= 0) {
+          const wrap = $("#dropZone");
+          rowband.style.opacity = "1";
+          rowband.style.top = (row / tx.h * 100) + "%";
+          rowband.style.height = (100 / tx.h) + "%";
+          setStatus(st, "Transmitting — sending row " + (row + 1) + " of " + tx.h + "…");
+        } else rowband.style.opacity = "0";
+      }, () => {
+        $("#txPlayBtn").disabled = false; $("#txBar").style.width = "100%";
+        setStatus(st, "Transmission complete — " + tx.w + " × " + tx.h + ", " + (tx.w * tx.h) + " pixel tones sent.", "ok");
+        setTimeout(() => { $("#txBar").style.width = "0%"; }, 1200);
+      });
+    }, 30);
+  });
+  $("#txDlBtn").addEventListener("click", () => {
+    if (!state.source) { toast("Load an image first."); return; }
+    const tx = ensureTx();
+    $("#selfDecodeBtn").disabled = false;
+    download(bufferToWav(tx.buffer), "sonify-transmission-" + tx.w + "x" + tx.h + ".wav");
+    toast("Transmission WAV downloaded — play it anywhere, or feed it to Receive.");
+  });
+
+  /* ============================================================
+     RECEIVE — rebuild the grid from tones (Goertzel detection)
+     ============================================================ */
+  function goertzel(x, start, len, freq, sr) {
+    const w = 2 * Math.PI * freq / sr, cw = Math.cos(w), coeff = 2 * cw, sw = Math.sin(w);
+    let s1 = 0, s2 = 0;
+    const end = Math.min(x.length, start + len);
+    for (let i = start; i < end; i++) { const s0 = x[i] + coeff * s1 - s2; s2 = s1; s1 = s0; }
+    const real = s1 - s2 * cw, imag = s2 * sw;
+    return Math.sqrt(real * real + imag * imag) / Math.max(1, end - start);
+  }
+
+  function syncSegments(x, sr) {
+    const hop = Math.round(sr * 0.005), win = Math.round(sr * 0.012);
+    const env = [];
+    let max = 0;
+    for (let s = 0; s + win < x.length; s += hop) { const m = goertzel(x, s, win, TX.SYNC, sr); env.push(m); if (m > max) max = m; }
+    const thr = Math.max(0.05, max * 0.32);
+    const segs = [];
+    let run = -1;
+    for (let i = 0; i <= env.length; i++) {
+      const on = i < env.length && env[i] > thr;
+      if (on && run < 0) run = i;
+      if (!on && run >= 0) {
+        const a = run * hop / sr, b = (i * hop + win) / sr;
+        if (b - a >= 0.018) segs.push({ start: a, end: b });
+        run = -1;
+      }
+    }
+    // merge segments separated by tiny gaps
+    const merged = [];
+    for (const s of segs) {
+      const last = merged[merged.length - 1];
+      if (last && s.start - last.end < 0.016) last.end = s.end; else merged.push({ start: s.start, end: s.end });
+    }
+    return merged;
+  }
+
+  function readCfg(x, sr, nominalStart) {
+    let best = { idx: 2, mag: -1 };
+    for (let off = nominalStart - 0.02; off <= nominalStart + 0.02; off += 0.004) {
+      const start = Math.round(off * sr), len = Math.round(0.115 * sr);
+      for (let idx = 0; idx < TX.SIZES.length; idx++) {
+        const m = goertzel(x, start, len, cfgFreq(idx), sr);
+        if (m > best.mag) best = { idx, mag: m };
+      }
+    }
+    return TX.SIZES[best.idx];
+  }
+
+  function decodeAudioBuffer(buf) {
+    const sr = buf.sampleRate;
+    const x = buf.getChannelData(0);
+    if (buf.numberOfChannels > 1) { const r = buf.getChannelData(1); for (let i = 0; i < x.length; i++) x[i] = (x[i] + r[i]) / 2; }
+    const segs = syncSegments(x, sr);
+    const pre = segs.find((s) => s.end - s.start >= 0.05);
+    if (!pre) throw new Error("No transmission marker beeps found in that sound. Make sure it is a Sonify transmission, played from the start.");
+    const w = readCfg(x, sr, pre.end + 0.05);
+    const h = readCfg(x, sr, pre.end + 0.23);
+    const data = new Uint8Array(w * h);
+    let searchFrom = pre.end + 0.40, rowsDone = 0;
+    for (let r = 0; r < h; r++) {
+      const seg = segs.find((s) => s.start >= searchFrom - 0.012 && s.end - s.start >= 0.02 && s.start < searchFrom + 0.6);
+      if (!seg) break;
+      const pixStart = seg.end + TX.GUARD_MS / 1000;
+      for (let c = 0; c < w; c++) {
+        const st = Math.round((pixStart + c * TX.PIXEL_MS / 1000 + 0.0025) * sr);
+        const len = Math.round(0.013 * sr);
+        let bestL = 0, bestM = -1;
+        for (let l = 0; l < TX.LEVELS; l++) { const m = goertzel(x, st, len, dataFreq(l), sr); if (m > bestM) { bestM = m; bestL = l; } }
+        data[r * w + c] = Math.round(bestL / (TX.LEVELS - 1) * 255);
+      }
+      rowsDone++;
+      searchFrom = pixStart + w * TX.PIXEL_MS / 1000 - 0.012;
+    }
+    if (rowsDone === 0) throw new Error("Found the start of a transmission but no picture rows followed it.");
+    return { w, h, data, rowsDone };
+  }
+
+  function showDecoded(dec) {
+    state.decoded = dec;
+    const cv = $("#recvCanvas"); cv.width = dec.w; cv.height = dec.h;
+    const g = cv.getContext("2d"), img = g.createImageData(dec.w, dec.h);
+    for (let i = 0; i < dec.w * dec.h; i++) { const v = dec.data[i]; img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    $("#rxGrid").textContent = dec.w + " × " + dec.h;
+    $("#rxRows").textContent = dec.rowsDone + " of " + dec.h;
+    // honest match score against the picture currently loaded
+    if (state.source) {
+      const orig = computeGrid(dec.w, dec.h);
+      let mad = 0;
+      for (let i = 0; i < dec.w * dec.h; i++) mad += Math.abs(orig[i] * 255 - dec.data[i]);
+      const pct = 100 * (1 - (mad / (dec.w * dec.h)) / 255);
+      $("#rxMatch").textContent = pct.toFixed(1) + "%";
+    } else $("#rxMatch").textContent = "—";
+    $("#rxDlBtn").disabled = false;
+  }
+
+  async function decodeAndShow(audioBuffer, how) {
+    const st = $("#rxStatus");
+    setStatus(st, "Listening to the tones and rebuilding the picture…");
+    $("#rxBar").style.width = "55%";
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const dec = decodeAudioBuffer(audioBuffer);
+      showDecoded(dec);
+      $("#rxBar").style.width = "100%";
+      setStatus(st, "Rebuilt from " + how + " — " + dec.rowsDone + " of " + dec.h + " rows recovered.", dec.rowsDone === dec.h ? "ok" : "");
+      setTimeout(() => { $("#rxBar").style.width = "0%"; }, 1400);
+    } catch (err) {
+      $("#rxBar").style.width = "0%";
+      setStatus(st, err.message, "err");
+    }
+  }
+
+  $("#selfDecodeBtn").addEventListener("click", () => {
+    if (!state.tx) { toast("Build a transmission first, in the Send tab."); return; }
+    decodeAndShow(state.tx.buffer, "your transmission, decoded in this tab");
+  });
+
+  $("#audioUploadBtn").addEventListener("click", () => $("#audioInput").click());
+  $("#audioInput").addEventListener("change", async (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    const st = $("#rxStatus");
+    setStatus(st, "Reading “" + f.name + "”…");
+    try {
+      const ab = await f.arrayBuffer();
+      const buf = await audioCtx().decodeAudioData(ab);
+      decodeAndShow(buf, "the file “" + f.name + "”");
+    } catch (err) { setStatus(st, "Could not read that audio file.", "err"); }
+  });
+
+  /* microphone receive */
+  let micRec = null;
+  $("#micBtn").addEventListener("click", async () => {
+    const st = $("#rxStatus"), btn = $("#micBtn"), label = $("#micBtnText");
+    if (micRec) { micRec.stop(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+      setStatus(st, "Microphone recording is not available in this browser view. Upload the transmission as a sound file instead.", "err");
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    } catch (err) {
+      setStatus(st, "Microphone permission was not given. You can still receive by uploading the sound file.", "err");
+      return;
+    }
+    const chunks = [];
+    const rec = new MediaRecorder(stream);
+    micRec = rec;
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      micRec = null;
+      btn.classList.remove("recording"); label.textContent = "Listen with microphone";
+      setStatus(st, "Recording stopped — decoding what the microphone heard…");
+      try {
+        const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+        const ab = await blob.arrayBuffer();
+        const buf = await audioCtx().decodeAudioData(ab);
+        decodeAndShow(buf, "the microphone recording");
+      } catch (err) { setStatus(st, "Could not decode that recording. Try again closer to the speaker, or use the sound file.", "err"); }
+    };
+    rec.start(250);
+    btn.classList.add("recording"); label.textContent = "Stop listening & decode";
+    setStatus(st, "Listening… start the transmission on the other device now. Press the button again when it finishes.");
+  });
+
+  $("#rxDlBtn").addEventListener("click", () => {
+    const d = state.decoded; if (!d) return;
+    const scale = 16, c = makeCanvas(d.w * scale, d.h * scale), g = c.getContext("2d");
+    for (let r = 0; r < d.h; r++) for (let col = 0; col < d.w; col++) {
+      const v = d.data[r * d.w + col];
+      g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+      g.fillRect(col * scale, r * scale, scale, scale);
+    }
+    c.toBlob((b) => { download(b, "sonify-received.png"); toast("Rebuilt picture downloaded."); }, "image/png");
+  });
+
+  /* ---------------- tabs ---------------- */
+  const TABS = ["play", "send", "receive"];
+  TABS.forEach((name) => {
+    $("#tab-" + name).addEventListener("click", () => {
+      TABS.forEach((n) => {
+        $("#tab-" + n).setAttribute("aria-selected", n === name ? "true" : "false");
+        $("#panel-" + n).hidden = n !== name;
+      });
+    });
+  });
+
+  /* ---------------- init ---------------- */
+  setSource(sampleCanvas(0), "Sample — Sunset ridge");
+  document.querySelectorAll(".thumb")[0].setAttribute("aria-pressed", "true");
+  drawWave(null);
+  $("#playTime").textContent = "0:00 / " + fmtTime(P.dur());
+
+  // exposed for testing / tinkering
+  window.Sonify = { buildTransmission, decodeAudioBuffer, computeGrid, renderPlayBuffer, state };
+</script>
+</body>
+</html>
