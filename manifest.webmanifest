@@ -1,0 +1,29 @@
+{
+  "name": "Sonify",
+  "short_name": "Sonify",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "./",
+  "start_url": "index.html",
+  "id": "index.html",
+  "theme_color": "#121110",
+  "background_color": "#121110",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
